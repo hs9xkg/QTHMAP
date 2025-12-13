@@ -1,0 +1,95 @@
+body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: 'Sarabun', sans-serif; overflow: hidden; }
+
+/* Sidebar */
+.sidebar { 
+    width: 340px; 
+    background: #f4f6f9; 
+    padding: 15px; 
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1); 
+    z-index: 1000; 
+    overflow-y: auto; 
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.header h2 { margin-top: 0; color: #2c3e50; display: flex; align-items: center; gap: 10px; }
+
+/* Map */
+#map { flex-grow: 1; height: 100%; }
+
+/* Panels */
+.control-panel { 
+    background: white; 
+    padding: 15px; 
+    border-radius: 8px; 
+    margin-bottom: 15px; 
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.control-panel h3 { margin-top: 0; margin-bottom: 10px; font-size: 1rem; color: #444; border-bottom: 2px solid #f0f0f0; padding-bottom: 5px; }
+
+.hint { font-size: 0.85em; color: #666; margin-bottom: 8px; margin-top: 0; }
+
+/* Inputs & Buttons */
+input { 
+    width: 100%; 
+    padding: 10px; 
+    margin-bottom: 10px; 
+    border: 1px solid #ddd; 
+    border-radius: 4px; 
+    box-sizing: border-box; 
+    font-size: 16px; 
+}
+
+button { 
+    width: 100%; 
+    padding: 10px; 
+    background: #007bff; 
+    color: white; 
+    border: none; 
+    cursor: pointer; 
+    border-radius: 4px; 
+    font-weight: bold;
+    transition: background 0.2s;
+    font-size: 1rem;
+}
+button:hover { background: #0056b3; }
+
+.btn-offline { background: #28a745; margin-top: 5px;}
+.btn-offline:hover { background: #218838; }
+
+/* Result Box */
+.result-box { 
+    margin-top: 15px; 
+    font-size: 0.95em; 
+    color: #333; 
+    line-height: 1.6;
+}
+
+.footer { margin-top: auto; text-align: center; color: #aaa; font-size: 0.75em; padding-top: 20px;}
+
+/* Custom Tooltip Label */
+.target-label {
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 2px solid #007bff; 
+    border-radius: 5px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    font-size: 13px;
+    color: #333;
+    padding: 2px 5px;
+    text-align: center;
+    white-space: nowrap; 
+}
+
+.leaflet-interactive {
+    transition: stroke-width 0.2s;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    body { flex-direction: column; }
+    .sidebar { width: 100%; height: 45%; order: 2; padding: 10px; }
+    #map { height: 55%; order: 1; }
+    .control-panel { padding: 10px; margin-bottom: 10px; }
+}

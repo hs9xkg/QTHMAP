@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thailand Disaster Response Map</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+    
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="header">
+            <h2>📡 Repeater Map</h2>
+        </div>
+        
+        <div class="control-panel">
+            <h3>🔍 Search Station</h3>
+            <input type="text" id="searchInput" placeholder="ชื่อสถานี, จังหวัด (เช่น Korat)..." onkeyup="searchStation()">
+        </div>
+
+        <div class="control-panel">
+            <h3>📐 Calculator & Heading</h3>
+            <p class="hint">ใส่ Grid Locator ของคุณเพื่อหาทิศทางเสา</p>
+            <input type="text" id="userGrid" placeholder="Ex. OK03GL" maxlength="6">
+            <button onclick="calculateNearest()">คำนวณหา Repeater ใกล้สุด</button>
+            <div id="calcResult" class="result-box"></div>
+        </div>
+
+        <div class="status-panel">
+            <p>Status: <span id="connectionStatus">Checking...</span></p>
+            <button onclick="downloadOfflineData()" class="btn-offline">💾 Save for Offline</button>
+        </div>
+        
+        <div class="footer">
+            <small>Thailand Disaster Response Map (Serverless)</small>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="script.js"></script>
+    
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log('Service Worker Registered'))
+                .catch(err => console.error('SW Registration Failed:', err));
+        }
+    </script>
+</body>
+</html>
