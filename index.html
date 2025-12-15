@@ -3,8 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thailand Disaster Response Map</title>
-    
+  <title>Thailand QTH Map By HS9XKG</title>
+    <meta name="description" content="Thailand QTH Map from original : Thailand Disaster Response & Repeater Map by Ham Radio Operator (HS9XKG).">
+
+    <meta name="keywords" content="QTH Map, Thailand Disaster Response & Repeater Map, Ham Radio, HS9XKG ">
+
+    <meta property="og:description" content="Chasing the Signals: From Cloud Infrastructure to HF Frequencies.">
+    <meta property="og:image" content="https://kazth.com/img/your-cover-image.jpg">
+    <meta property="og:url" content="https://kazth.com/qth">
+      <!-- Favicons -->
+  <link href="favicon.png" rel="icon">
+  <link href="favicon.png" rel="apple-touch-icon">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css">
     
@@ -14,7 +23,7 @@
 
     <div class="sidebar">
         <div class="header">
-            <h2>📡 Repeater Map</h2>
+            <h2>📡 TH QTH Map v. 1.1</h2>
         </div>
         
         <div class="control-panel">
@@ -23,20 +32,46 @@
         </div>
 
         <div class="control-panel">
-            <h3>📐 Calculator & Heading</h3>
-            <p class="hint">ใส่ Grid Locator ของคุณเพื่อหาทิศทางเสา</p>
-            <input type="text" id="userGrid" placeholder="Ex. OK03GL" maxlength="6">
-            <button onclick="calculateNearest()">คำนวณหา Repeater ใกล้สุด</button>
-            <div id="calcResult" class="result-box"></div>
+            <h3>🛠️ Map Options</h3>
+            
+            <div class="filter-group">
+                <label><input type="checkbox" value="Analog" checked class="filter-chk">Analog</label>
+                <label><input type="checkbox" value="D-Star" checked class="filter-chk">D-Star</label>
+                <label><input type="checkbox" value="Echolink" checked class="filter-chk">Echolink</label>
+                <label><input type="checkbox" value="Center" checked class="filter-chk">Center</label>
+            </div>
+
+            <div class="grid-toggle" style="margin-top: 8px; border-top: 1px solid #eee; padding-top: 5px;">
+                <label><input type="checkbox" id="toggle-grid"> 🌐 Show Maidenhead Grid</label>
+            </div>
         </div>
 
+        <div class="control-panel">
+            <h3>📐 Calculator & Heading</h3>
+            <p class="hint">ใส่ Grid Locator หรือกด GPS</p>
+            
+            <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                <input type="text" id="userGrid" placeholder="Ex. OK03GL" maxlength="6" style="flex: 2;">
+                <button id="btn-gps" title="Use My Location" style="flex: 1; background:#007bff; color:white;">📍 GPS</button>
+            </div>
+            
+            <div style="display: flex; gap: 5px;">
+                <button onclick="calculateNearest()" style="flex: 2;">คำนวณ (Calculate)</button>
+                <button onclick="resetApp()" class="btn-reset" style="flex: 1;">🔄 Reset</button>
+            </div>
+            
+            <div id="calcResult" class="result-box"></div>
+        </div>
+**ระยะทางคำนวนอ้างอิงจากหมุดในแผนที่ โปรดตรวจสอบข้อมูล** <br>
+แจ้งปรับปรุงข้อมูล hs9xkg@gmail.com
         <div class="status-panel">
             <p>Status: <span id="connectionStatus">Checking...</span></p>
             <button onclick="downloadOfflineData()" class="btn-offline">💾 Save for Offline</button>
         </div>
         
         <div class="footer">
-            <small>Thailand Disaster Response Map (Serverless)</small>
+            <small>Thailand QTH Map (Version 1.1)by HS9XKG</small> <br>
+			Contact Me hs9xkg@gmail.com
         </div>
     </div>
 
@@ -44,6 +79,9 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <script src="leaflet.maidenhead.js"></script>
+    
     <script src="script.js"></script>
     
     <script>

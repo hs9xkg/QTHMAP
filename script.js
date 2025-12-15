@@ -1,235 +1,208 @@
-// --- Configuration ---
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQy9KrpH_QcSIZcT4aFobOtD24u6CUQ9SzLXOAYJ7ilkip328YRSrOrTK9EZYjNpsT96Kvb2mV3HF2T/pub?output=csv';
+/* script.js (Final Restoration) */
+const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQy9KrpH_QcSIZcT4aFobOtD24u6CUQ9SzLXOAYJ7ilkip328YRSrOrTK9EZYjNpsT96Kvb2mV3HF2T/pub?output=csv';
+const DEFAULT_CENTER = [13.7563, 100.5018];
+const DEFAULT_ZOOM = 6;
 
-// --- Global Variables ---
 let map;
-let stationData = [];
-let allMarkers = [];
-let userMarker = null;
-let userLatLng = null;
+let allStationsData = []; 
+let markersLayer; 
+let gridLayer;
+let userMarker = null; // หมุดเรา
+let userPosition = null; 
 let connectionLine = null;
-let currentTarget = null; 
 
-// --- 1. Init Map ---
+const icons = {
+    analog: L.icon({ iconUrl: 'antenna.png', iconSize: [32, 32], iconAnchor: [16, 32] }),
+    dstar: L.icon({ iconUrl: 'antenna_dstar.png', iconSize: [32, 32], iconAnchor: [16, 32] }),
+    echolink: L.icon({ iconUrl: 'antenna_echo.png', iconSize: [32, 32], iconAnchor: [16, 32] }),
+    center: L.icon({ iconUrl: 'antenna_center.png', iconSize: [36, 36], iconAnchor: [18, 36] }),
+    default: L.icon({ iconUrl: 'antenna.png', iconSize: [32, 32], iconAnchor: [16, 32] }),
+    // ไอค่อนบ้าน: ใช้ Emoji 🏠 และ class .user-pin
+    user: L.divIcon({ className: 'user-pin', html: '🏠', iconSize: [40, 40], iconAnchor: [20, 20] }) 
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    initMap();
+    initEventListeners();
+    fetchData(); 
+    checkOfflineStatus();
+});
+
 function initMap() {
-    map = L.map('map').setView([13.7563, 100.5018], 6);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19
-    }).addTo(map);
-
-    fetchData();
+    map = L.map('map').setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
 }
 
-// --- 2. Fetch Data ---
 function fetchData() {
-    Papa.parse(SHEET_URL, {
-        download: true,
-        header: true,
+    console.log("Fetching Data...");
+    Papa.parse(GOOGLE_SHEET_CSV_URL, {
+        download: true, header: true, skipEmptyLines: true, transformHeader: h => h.trim().toLowerCase(), 
         complete: function(results) {
-            stationData = results.data;
-            plotStations(stationData);
-            document.getElementById('connectionStatus').innerText = "Online (Updated)";
-            document.getElementById('connectionStatus').style.color = "green";
-            localStorage.setItem('offlineStations', JSON.stringify(stationData));
+            allStationsData = results.data.filter(row => row.lat && row.lng && !isNaN(parseFloat(row.lat))).map(row => ({
+                ...row, lat: parseFloat(row.lat), lng: parseFloat(row.lng),
+                name: row.name || 'Unknown', type: row.type || 'Analog', freq: row.frequency || '-', 
+                desc: row.description || row.detail || '', link: row.link || ''
+            }));
+            if (allStationsData.length > 0) { renderMarkers(); updateStatus("Online"); } else { alert("ไม่พบข้อมูล CSV"); }
         },
-        error: function(err) {
-            console.error("Error fetching data:", err);
-            const cached = localStorage.getItem('offlineStations');
-            if (cached) {
-                stationData = JSON.parse(cached);
-                plotStations(stationData);
-                document.getElementById('connectionStatus').innerText = "Offline Mode (Cached)";
-                document.getElementById('connectionStatus').style.color = "orange";
-            }
-        }
+        error: err => { console.error(err); updateStatus("Offline Mode"); }
     });
 }
 
-// --- 3. Plot Stations ---
-function plotStations(data) {
-    allMarkers.forEach(m => map.removeLayer(m));
-    allMarkers = [];
+function renderMarkers() {
+    markersLayer.clearLayers();
+    if(connectionLine) map.removeLayer(connectionLine);
+    // ไม่ยุ่งกับ userMarker เพื่อให้มันอยู่ตลอด
 
-    // กำหนดชื่อไฟล์รูปภาพให้ตรงกับ Type ใน Google Sheets
-    const iconConfig = {
-        'Analog Repeater': 'antenna.png',        
-        'D-Star':          'antenna_dstar.png',  
-        'Echolink':        'antenna_echo.png',   
-        'Center':          'antenna_center.png'  
-    };
-    
-    // รูปสำรอง
-    const defaultIconUrl = 'antenna.png'; 
+    const checkedTypes = Array.from(document.querySelectorAll('.filter-chk:checked')).map(cb => cb.value.toLowerCase());
+    const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
 
-    data.forEach(station => {
-        if(station.Lat && station.Lng) {
-            const lat = parseFloat(station.Lat);
-            const lng = parseFloat(station.Lng);
-            
-            // ดึงประเภทและตัดช่องว่างซ้ายขวา
-            const type = station.Type ? station.Type.trim() : 'Analog Repeater';
+    allStationsData.forEach(station => {
+        const type = (station.type || 'analog').toLowerCase();
+        const name = (station.name || '').toLowerCase();
+        const desc = (station.desc || '').toLowerCase();
+        const freq = (station.freq || '').toLowerCase();
+        
+        let isTypeMatch = checkedTypes.some(t => type.includes(t)) || (type.includes('repeater') && checkedTypes.includes('analog'));
+        let isSearchMatch = searchVal === "" || name.includes(searchVal) || desc.includes(searchVal) || freq.includes(searchVal);
 
-            // เลือกรูปภาพจาก config ถ้าไม่มีใช้ default
-            const finalIconUrl = iconConfig[type] || defaultIconUrl;
-            
-            // สร้าง Icon Object
-            const customIcon = L.icon({
-                iconUrl: finalIconUrl,
-                iconSize: [32, 32],
-                iconAnchor: [16, 32], 
-                popupAnchor: [0, -32]
-            });
-
-            const marker = L.marker([lat, lng], {icon: customIcon}).addTo(map);
-
-            marker.stationName = (station.Name || "").toLowerCase();
-            marker.stationDesc = (station.Description || "").toLowerCase();
-
-            const popupContent = `
-                <div style="text-align:center; min-width: 150px;">
-                    <b>${station.Name}</b><br>
-                    <span style="font-size:0.8em; color:gray; border:1px solid #ccc; padding:1px 4px; border-radius:3px;">${station.Type}</span><br>
-                    <div style="margin:5px 0; font-weight:bold; color:#007bff;">Freq: ${station.Frequency}</div>
-                    <small>${station.Description}</small><br>
-                    <a href="${station.Link}" target="_blank">More Info</a>
-                </div>
-            `;
-            marker.bindPopup(popupContent);
-
-            marker.on('click', function() {
-                if(userLatLng) {
-                    calculateAndDraw(userLatLng, marker.getLatLng(), marker);
-                }
-            });
-            
-            allMarkers.push(marker);
-        }
+        if (isTypeMatch && isSearchMatch) { addStationMarker(station, type); }
     });
 }
 
-// --- 4. Search Function ---
-function searchStation() {
-    const searchText = document.getElementById('searchInput').value.toLowerCase();
-    allMarkers.forEach(marker => {
-        const matchName = marker.stationName.includes(searchText);
-        const matchDesc = marker.stationDesc.includes(searchText);
-        if (matchName || matchDesc) {
-            if (!map.hasLayer(marker)) map.addLayer(marker);
-        } else {
-            map.removeLayer(marker);
-        }
-    });
-}
+function addStationMarker(station, type) {
+    let icon = icons.default;
+    if (type.includes('d-star')) icon = icons.dstar; else if (type.includes('echolink')) icon = icons.echolink; else if (type.includes('center')) icon = icons.center; else if (type.includes('analog')) icon = icons.analog;
 
-// --- 5. Calculation Logic ---
-function gridToLatLon(grid) {
-    grid = grid.toUpperCase().trim();
-    if (grid.length < 6) return null;
-    const A = 'A'.charCodeAt(0);
-    const lon = (grid.charCodeAt(0) - A) * 20 + parseInt(grid[2]) * 2 + (grid.charCodeAt(4) - A) / 12 - 180;
-    const lat = (grid.charCodeAt(1) - A) * 10 + parseInt(grid[3]) + (grid.charCodeAt(5) - A) / 24 - 90;
-    return L.latLng(lat + 1/48, lon + 1/24);
-}
-
-function getBearing(startLat, startLng, destLat, destLng) {
-    const toRad = (deg) => deg * Math.PI / 180;
-    const toDeg = (rad) => rad * 180 / Math.PI;
-    const y = Math.sin(toRad(destLng - startLng)) * Math.cos(toRad(destLat));
-    const x = Math.cos(toRad(startLat)) * Math.sin(toRad(destLat)) -
-              Math.sin(toRad(startLat)) * Math.cos(toRad(destLat)) * Math.cos(toRad(destLng - startLng));
-    let brng = toDeg(Math.atan2(y, x));
-    return (brng + 360) % 360;
-}
-
-function getCardinalDirection(angle) {
-    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    const index = Math.round(((angle %= 360) < 0 ? angle + 360 : angle) / 45) % 8;
-    return directions[index];
-}
-
-function calculateAndDraw(fromLatLng, toLatLng, targetMarker) {
-    const distMeters = map.distance(fromLatLng, toLatLng);
-    const distKm = (distMeters / 1000).toFixed(2);
-    const bearing = getBearing(fromLatLng.lat, fromLatLng.lng, toLatLng.lat, toLatLng.lng).toFixed(0);
-    const cardinal = getCardinalDirection(bearing);
-
-    let stationName = "Target";
-    if(targetMarker && targetMarker.stationName) {
-         stationName = targetMarker.stationName.charAt(0).toUpperCase() + targetMarker.stationName.slice(1);
+    const marker = L.marker([station.lat, station.lng], { icon: icon });
+    let linkHtml = ''; let rawLink = (station.link || '').trim();
+    if (rawLink.length > 3 && rawLink.toLowerCase() !== 'no') {
+        if (!rawLink.startsWith('http')) rawLink = 'http://' + rawLink;
+        linkHtml = `<div style="margin-top:6px;"><a href="${rawLink}" target="_blank" style="color:#007bff; text-decoration:none;">🌐 Website / Link</a></div>`;
     }
 
-    document.getElementById('calcResult').innerHTML = `
-        <div style="background:#eef; padding:10px; border-radius:5px; border-left: 4px solid #007bff;">
-            <b>Target: ${stationName}</b><br>
-            ระยะทาง: <b>${distKm} km</b><br>
-            <hr style="margin:5px 0; border:0; border-top:1px solid #ccc;">
-            📡 หันเสาไปทาง: <b>${bearing}° (${cardinal})</b>
+    // --- Popup Design (Phase 1 Replica) ---
+    const popupContent = `
+        <div style="text-align:center; min-width: 210px; font-family: sans-serif; line-height: 1.5;">
+            <h3 style="margin: 0 0 5px 0; color:#222; font-size:1.2rem;">${station.name}</h3>
+            
+            <div style="display:inline-block; border:1px solid #ccc; border-radius:12px; padding:1px 12px; font-size:0.85rem; color:#777; margin-bottom: 5px; background-color: #fff;">
+                ${station.type}
+            </div>
+
+            <div style="color: #E91E63; font-weight: 700; font-size: 1.3rem; margin: 4px 0;">
+                ${station.freq}
+            </div>
+            
+            <div style="color: #444; font-size: 0.95rem;">
+                ${station.desc}
+            </div>
+            
+            ${linkHtml}
+
+            <div style="margin-top: 10px; font-size: 0.85rem; color: #999; background: #f8f8f8; border-radius: 4px; padding: 4px;">
+                Grid: ${toMaidenhead(station.lat, station.lng)}
+            </div>
         </div>
     `;
-
-    if(connectionLine) map.removeLayer(connectionLine);
-    connectionLine = L.polyline([fromLatLng, toLatLng], {
-        color: 'red', weight: 3, opacity: 0.8, dashArray: '10, 10'
-    }).addTo(map);
-
-    // จัดการป้าย (Tooltip)
-    if (currentTarget) {
-        currentTarget.unbindTooltip();
-        currentTarget.closePopup(); 
-    }
-    currentTarget = targetMarker;
-
-    if(targetMarker) {
-        targetMarker.bindTooltip(
-            `<div style="text-align:center;">
-                <b>${stationName.toUpperCase()}</b><br>
-                <span style="color:blue;">↘ ${bearing}° (${cardinal})</span><br>
-                <span style="font-size:0.9em; color:#666;">${distKm} km</span>
-             </div>`, 
-            {
-                permanent: true, 
-                direction: 'bottom', 
-                className: 'target-label',
-                offset: [0, 5],
-                opacity: 0.95
-            }
-        ).openTooltip();
-    }
+    marker.bindPopup(popupContent);
+    marker.on('click', () => { drawPolyline(station.lat, station.lng, station.name); });
+    markersLayer.addLayer(marker);
 }
 
-function calculateNearest() {
-    const grid = document.getElementById('userGrid').value;
-    const userLoc = gridToLatLon(grid);
-    if (!userLoc) { alert("Invalid Grid (e.g. OK03GL)"); return; }
-    userLatLng = userLoc;
+function drawPolyline(targetLat, targetLng, targetName) {
+    if (!userPosition) return; 
+    if (connectionLine) map.removeLayer(connectionLine);
 
-    if(userMarker) map.removeLayer(userMarker);
-    const homeIcon = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/128/25/25694.png',
-        iconSize: [24, 24], iconAnchor: [12, 24]
-    });
-    userMarker = L.marker(userLoc, {icon: homeIcon}).addTo(map).bindPopup("<b>Your QTH</b><br>" + grid.toUpperCase());
+    const bearing = getBearing(userPosition.lat, userPosition.lng, targetLat, targetLng);
+    const distance = getDistanceFromLatLonInKm(userPosition.lat, userPosition.lng, targetLat, targetLng);
+    const direction = getCardinalDirection(bearing);
 
-    let nearestMarker = null;
-    let minDist = Infinity;
+    connectionLine = L.polyline([[userPosition.lat, userPosition.lng], [targetLat, targetLng]], 
+        { color: '#dc3545', weight: 2, opacity: 0.8, dashArray: '6, 6' }).addTo(map);
+
+    // Tooltip บนเส้น (ใช้ class .target-label ที่เราแก้ CSS แล้ว)
+    const labelContent = `<div style="font-weight:bold; color:#007bff;">${targetName}</div><div>↘ ${bearing.toFixed(0)}° (${direction})</div><div>${distance.toFixed(2)} km</div>`;
     
-    allMarkers.forEach(marker => {
-        if (map.hasLayer(marker)) { 
-            const dist = map.distance(userLoc, marker.getLatLng());
-            if(dist < minDist) { minDist = dist; nearestMarker = marker; }
-        }
-    });
+    // ตั้งค่า direction: 'center' เพื่อให้อยู่กลางเส้น ไม่ทับ Popup สถานี
+    connectionLine.bindTooltip(labelContent, { permanent: true, direction: 'center', className: 'target-label', opacity: 1 }).openTooltip();
+}
 
-    if(nearestMarker) {
-        calculateAndDraw(userLoc, nearestMarker.getLatLng(), nearestMarker);
-        map.fitBounds(new L.featureGroup([userMarker, nearestMarker]).getBounds().pad(0.2));
+window.searchStation = () => renderMarkers();
+window.resetApp = () => {
+    document.getElementById('searchInput').value = '';
+    if(connectionLine) map.removeLayer(connectionLine);
+    // ไม่ลบ userMarker
+    document.querySelectorAll('.filter-chk').forEach(c => c.checked = true);
+    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    renderMarkers();
+}
+
+window.calculateNearest = function() {
+    const manualGrid = document.getElementById('userGrid').value.trim();
+    if (manualGrid.length >= 4) {
+        const coords = maidenheadToLatLon(manualGrid);
+        if (coords) {
+            userPosition = { lat: coords[0], lng: coords[1] };
+            updateUserMarker(userPosition.lat, userPosition.lng, `Manual QTH: ${manualGrid.toUpperCase()}`);
+        } else { alert("Grid Locator ไม่ถูกต้อง"); return; }
+    } else if (!userPosition) { alert("กรุณากดปุ่ม GPS หรือกรอก Grid Locator ก่อนคำนวณ"); return; }
+
+    const stationsWithDist = allStationsData.map(st => {
+        const d = getDistanceFromLatLonInKm(userPosition.lat, userPosition.lng, st.lat, st.lng);
+        const b = getBearing(userPosition.lat, userPosition.lng, st.lat, st.lng);
+        return { ...st, distance: d, bearing: b };
+    });
+    stationsWithDist.sort((a, b) => a.distance - b.distance);
+    
+    let html = '<div style="background:#f9f9f9; padding:10px; border-radius:5px; margin-top:5px;"><strong>📡 5 สถานีใกล้สุด:</strong><br>';
+    stationsWithDist.slice(0, 5).forEach(st => {
+        const dir = getCardinalDirection(st.bearing);
+        html += `<div style="margin-top:8px; border-bottom:1px solid #ddd; padding-bottom:5px; cursor:pointer;" onclick="map.setView([${st.lat}, ${st.lng}], 13); drawPolyline(${st.lat}, ${st.lng}, '${st.name}')"><b>${st.name}</b> <span style="color:#e91e63">(${st.freq})</span><br>📡 หันเสาไปทาง: <b>${st.bearing.toFixed(0)}° (${dir})</b><br><span style="color:#666; font-size:0.9em;">ระยะทาง: ${st.distance.toFixed(1)} km</span></div>`;
+    });
+    html += '</div>';
+    document.getElementById('calcResult').innerHTML = html;
+}
+
+function initEventListeners() {
+    document.querySelectorAll('.filter-chk').forEach(chk => chk.addEventListener('change', renderMarkers));
+    const btnGps = document.getElementById('btn-gps');
+    if(btnGps) {
+        btnGps.addEventListener('click', () => {
+            btnGps.innerText = "⏳...";
+            if (!navigator.geolocation) { alert("Browser ไม่รองรับ GPS"); return; }
+            navigator.geolocation.getCurrentPosition(pos => {
+                const lat = pos.coords.latitude; const lng = pos.coords.longitude;
+                userPosition = { lat, lng }; const myGrid = toMaidenhead(lat, lng);
+                document.getElementById('userGrid').value = myGrid;
+                updateUserMarker(lat, lng, `Your QTH: ${myGrid}`);
+                btnGps.innerText = "📍 OK"; setTimeout(() => btnGps.innerText = "📍 GPS", 2000);
+            }, err => { alert("GPS Error: " + err.message); btnGps.innerText = "📍 GPS"; });
+        });
+    }
+    const toggleGrid = document.getElementById('toggle-grid');
+    if(toggleGrid) {
+        toggleGrid.addEventListener('change', (e) => {
+            if (e.target.checked && typeof L.maidenhead === 'function') { gridLayer = L.maidenhead({ color: 'rgba(0,0,0,0.4)' }).addTo(map); } 
+            else if (gridLayer) { map.removeLayer(gridLayer); }
+        });
     }
 }
 
-function downloadOfflineData() {
-    alert("ข้อมูลถูกบันทึกลง Cache Browser แล้ว (พร้อมใช้งาน Offline)");
+function updateUserMarker(lat, lng, msg) {
+    if(userMarker) map.removeLayer(userMarker);
+    // 🔴 ใส่ zIndexOffset 9999 ให้หมุดเราอยู่บนสุด
+    userMarker = L.marker([lat, lng], {icon: icons.user, zIndexOffset: 9999}).addTo(map).bindPopup(`<b>${msg}</b>`).openPopup();
+    map.setView([lat, lng], 10);
 }
 
-initMap();
+// Math Utils (คงเดิม)
+function toMaidenhead(lat, lng) { const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; lng += 180; lat += 90; const f1 = A[Math.floor(lng/20)]; const f2 = A[Math.floor(lat/10)]; let rLng = lng%20; let rLat = lat%10; const s1 = Math.floor(rLng/2); const s2 = Math.floor(rLat/1); let ss1 = A[Math.floor((rLng%2)/(2/24))].toLowerCase(); let ss2 = A[Math.floor((rLat%1)/(1/24))].toLowerCase(); return f1+f2+s1+s2+ss1+ss2; }
+function maidenheadToLatLon(grid) { grid = grid.toUpperCase(); if (grid.length < 4) return null; const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; let lng = (A.indexOf(grid[0])*20)-180; let lat = (A.indexOf(grid[1])*10)-90; lng += parseInt(grid[2])*2; lat += parseInt(grid[3])*1; if (grid.length >= 6) { lng += (A.indexOf(grid[4])*(2/24))+(1/24); lat += (A.indexOf(grid[5])*(1/24))+(0.5/24); } else { lng += 1; lat += 0.5; } return [lat, lng]; }
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) { const R = 6371; const dLat = deg2rad(lat2-lat1); const dLon = deg2rad(lon2-lon1); const a = Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(deg2rad(lat1))*Math.cos(deg2rad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2); return R*(2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); }
+function getBearing(startLat, startLng, destLat, destLng){ startLat = deg2rad(startLat); startLng = deg2rad(startLng); destLat = deg2rad(destLat); destLng = deg2rad(destLng); const y = Math.sin(destLng-startLng)*Math.cos(destLat); const x = Math.cos(startLat)*Math.sin(destLat)-Math.sin(startLat)*Math.cos(destLat)*Math.cos(destLng-startLng); return (rad2deg(Math.atan2(y, x))+360)%360; }
+function getCardinalDirection(angle) { const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']; return directions[Math.round(angle/45)%8]; }
+function deg2rad(deg) { return deg * (Math.PI/180); } function rad2deg(rad) { return rad * (180/Math.PI); }
+function updateStatus(msg) { const el = document.getElementById('connectionStatus'); if(el) el.innerText = msg; }
+function checkOfflineStatus() { window.addEventListener('online', () => updateStatus('Online')); window.addEventListener('offline', () => updateStatus('Offline Mode')); }

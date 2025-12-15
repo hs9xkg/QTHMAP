@@ -1,7 +1,7 @@
-// Version 7: บังคับอัปเดตใหม่
-const CACHE_NAME = 'repeater-map-v7'; 
-const DATA_CACHE_NAME = 'repeater-data-v7';
-const TILE_CACHE_NAME = 'repeater-tiles-v7';
+// Version 8
+const CACHE_NAME = 'repeater-map-v11'; 
+const DATA_CACHE_NAME = 'repeater-data-v11';
+const TILE_CACHE_NAME = 'repeater-tiles-v11';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -9,18 +9,18 @@ const ASSETS_TO_CACHE = [
   './style.css',
   './script.js',
   './manifest.json',
+  './leaflet.maidenhead.js',
   
-  // *** ไฟล์รูปภาพไอค่อน (ตรวจสอบว่าอัปโหลดไฟล์จริงครบทุกชื่อ) ***
+  // รูปภาพไอค่อน
   './antenna.png',        
   './antenna_dstar.png',  
   './antenna_echo.png',
   './antenna_center.png', 
 
-  // Libraries และรูปเสริม
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
-  'https://cdn-icons-png.flaticon.com/128/25/25694.png', // Home Icon
+  'https://cdn-icons-png.flaticon.com/128/25/25694.png', 
   'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
 ];
 
